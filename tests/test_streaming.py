@@ -1,0 +1,138 @@
+"""Unit tests for filter_paths() and walk()."""
+
+import os
+import tempfile
+import unittest
+
+from globstream import filter_paths, walk
+
+
+class FilterPathsTest(unittest.TestCase):
+    def test_yields_only_matching_paths(self):
+        paths = ["a.py", "a.txt", "b.py", "b.txt"]
+        result = list(filter_paths("*.py", paths))
+        self.assertEqual(result, ["a.py", "b.py"])
+
+    def test_single_pattern_string_is_wrapped(self):
+        # A bare string pattern should behave like a one-element list,
+        # not get iterated character by character.
+        result = list(filter_paths("*.py", ["a.py"]))
+        self.assertEqual(result, ["a.py"])
+
+    def test_multiple_patterns_are_ored(self):
+        paths = ["a.py", "a.txt", "a.md"]
+        result = list(filter_paths(["*.py", "*.md"], paths))
+        self.assertEqual(result, ["a.py", "a.md"])
+
+    def test_empty_patterns_matches_nothing(self):
+        result = list(filter_paths([], ["a.py", "b.py"]))
+        self.assertEqual(result, [])
+
+    def test_empty_input_yields_nothing(self):
+        result = list(filter_paths("*.py", []))
+        self.assertEqual(result, [])
+
+    def test_consumes_input_lazily(self):
+        # Only the items actually needed to produce one match should ever
+        # be pulled from the source iterable.
+        consumed = []
+
+        def source():
+            for i in range(10**9):
+                consumed.append(i)
+                yield "match.py" if i == 0 else f"file{i}.txt"
+
+        it = filter_paths("*.py", source())
+        self.assertEqual(next(it), "match.py")
+        self.assertEqual(consumed, [0])
+
+
+class WalkTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self._touch("a.py")
+        self._touch("b.txt")
+        self._touch("src/core.py")
+        self._touch("src/pkg/__init__.py")
+        self._touch("src/pkg/mod.py")
+        os.makedirs(os.path.join(self.root, "empty_dir"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _touch(self, rel_path):
+        full = os.path.join(self.root, *rel_path.split("/"))
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w"):
+            pass
+
+    def test_yields_files_and_dirs_relative_to_root(self):
+        result = set(walk(self.root))
+        self.assertEqual(
+            result,
+            {
+                "a.py",
+                "b.txt",
+                "src",
+                "src/core.py",
+                "src/pkg",
+                "src/pkg/__init__.py",
+                "src/pkg/mod.py",
+                "empty_dir",
+            },
+        )
+
+    def test_files_only_excludes_directories(self):
+        result = set(walk(self.root, files_only=True))
+        self.assertEqual(
+            result,
+            {
+                "a.py",
+                "b.txt",
+                "src/core.py",
+                "src/pkg/__init__.py",
+                "src/pkg/mod.py",
+            },
+        )
+
+    def test_filters_by_pattern_across_depths(self):
+        result = set(walk(self.root, patterns="**/*.py"))
+        self.assertEqual(
+            result,
+            {"a.py", "src/core.py", "src/pkg/__init__.py", "src/pkg/mod.py"},
+        )
+
+    def test_pattern_can_select_a_directory_and_its_contents(self):
+        result = set(walk(self.root, patterns="src/**"))
+        self.assertEqual(
+            result,
+            {
+                "src",
+                "src/core.py",
+                "src/pkg",
+                "src/pkg/__init__.py",
+                "src/pkg/mod.py",
+            },
+        )
+
+    def test_multiple_patterns_are_ored(self):
+        result = set(walk(self.root, patterns=["*.txt", "empty_dir"]))
+        self.assertEqual(result, {"b.txt", "empty_dir"})
+
+    def test_no_matches_yields_nothing(self):
+        result = list(walk(self.root, patterns="*.nonexistent"))
+        self.assertEqual(result, [])
+
+    def test_empty_directory_yields_nothing(self):
+        empty_root = os.path.join(self.root, "empty_dir")
+        self.assertEqual(list(walk(empty_root)), [])
+
+    def test_missing_root_raises(self):
+        missing = os.path.join(self.root, "does-not-exist")
+        with self.assertRaises(FileNotFoundError):
+            list(walk(missing))
+
+
+if __name__ == "__main__":
+    unittest.main()
