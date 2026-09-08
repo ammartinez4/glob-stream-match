@@ -4,7 +4,31 @@ import os
 import tempfile
 import unittest
 
-from globstream import filter_paths, walk
+from globstream import filter_paths, read_paths, walk
+
+
+class ReadPathsTest(unittest.TestCase):
+    def test_strips_newlines_and_skips_blank_lines(self):
+        lines = ["a.py\n", "\n", "b.py\r\n", "c.py"]
+        self.assertEqual(list(read_paths(lines)), ["a.py", "b.py", "c.py"])
+
+    def test_normalizes_backslashes_when_requested(self):
+        lines = ["src\\pkg\\mod.py"]
+        result = list(read_paths(lines, normalize_sep=True))
+        self.assertEqual(result, ["src/pkg/mod.py"])
+
+    def test_leaves_backslashes_alone_when_disabled(self):
+        lines = ["src\\pkg\\mod.py"]
+        result = list(read_paths(lines, normalize_sep=False))
+        self.assertEqual(result, ["src\\pkg\\mod.py"])
+
+    def test_default_follows_host_separator(self):
+        lines = ["src\\pkg\\mod.py"]
+        result = list(read_paths(lines))
+        if os.sep == "/":
+            self.assertEqual(result, ["src\\pkg\\mod.py"])
+        else:
+            self.assertEqual(result, ["src/pkg/mod.py"])
 
 
 class FilterPathsTest(unittest.TestCase):

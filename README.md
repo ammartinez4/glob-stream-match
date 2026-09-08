@@ -86,7 +86,12 @@ matches = [p for p in all_paths if pattern.match(p)]
   `a/**/b` matches `a/b`, `a/x/b`, and `a/x/y/b`
 
 Patterns are matched against `/`-separated paths regardless of host
-OS. On Windows, normalize backslashes to `/` before matching.
+OS. `walk()` always yields forward-slash paths, since it joins path
+components itself rather than going through `os.path.join`. Lines
+from `read_paths()` are normalized the same way by default when
+running on Windows (pass `normalize_sep=` to override); if you're
+feeding paths in from somewhere else, normalize backslashes to `/`
+yourself before matching.
 
 ## Status
 

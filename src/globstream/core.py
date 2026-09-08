@@ -134,7 +134,9 @@ def filter_paths(
             yield path
 
 
-def read_paths(lines: Iterable[str]) -> Iterator[str]:
+def read_paths(
+    lines: Iterable[str], *, normalize_sep: Optional[bool] = None
+) -> Iterator[str]:
     """
     Lazily yield non-empty, newline-stripped paths from an iterable of
     lines (for example an open file object). Intended to sit in front of
@@ -143,11 +145,24 @@ def read_paths(lines: Iterable[str]) -> Iterator[str]:
         with open("manifest.txt") as f:
             for p in filter_paths("**/*.py", read_paths(f)):
                 ...
+
+    Patterns are always matched against forward-slash paths, but a
+    manifest written on Windows will typically use backslashes. By
+    default, lines are normalized (backslashes turned into forward
+    slashes) when running on Windows (os.sep != '/'), and left alone
+    otherwise. Pass `normalize_sep` explicitly to override that - for
+    example when matching a manifest that was produced on a different
+    OS than the one running the match.
     """
+    if normalize_sep is None:
+        normalize_sep = os.sep != "/"
     for line in lines:
         line = line.rstrip("\r\n")
-        if line:
-            yield line
+        if not line:
+            continue
+        if normalize_sep:
+            line = line.replace("\\", "/")
+        yield line
 
 
 def walk(
