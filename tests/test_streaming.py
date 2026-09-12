@@ -56,6 +56,25 @@ class FilterPathsTest(unittest.TestCase):
         result = list(filter_paths("*.py", []))
         self.assertEqual(result, [])
 
+    def test_negated_pattern_excludes_from_earlier_match(self):
+        paths = ["a.py", "test_a.py", "b.py"]
+        result = list(filter_paths(["*.py", "!test_*.py"], paths))
+        self.assertEqual(result, ["a.py", "b.py"])
+
+    def test_negated_pattern_alone_matches_nothing(self):
+        # There's nothing earlier for it to carve an exception out of.
+        result = list(filter_paths("!*.py", ["a.py"]))
+        self.assertEqual(result, [])
+
+    def test_later_positive_pattern_overrides_earlier_negation(self):
+        paths = ["keep.py"]
+        result = list(filter_paths(["!*.py", "keep.py"], paths))
+        self.assertEqual(result, ["keep.py"])
+
+    def test_escaped_bang_is_a_literal_pattern_character(self):
+        result = list(filter_paths("\\!important", ["!important", "important"]))
+        self.assertEqual(result, ["!important"])
+
     def test_consumes_input_lazily(self):
         # Only the items actually needed to produce one match should ever
         # be pulled from the source iterable.
@@ -147,6 +166,10 @@ class WalkTest(unittest.TestCase):
     def test_no_matches_yields_nothing(self):
         result = list(walk(self.root, patterns="*.nonexistent"))
         self.assertEqual(result, [])
+
+    def test_negated_pattern_excludes_from_earlier_match(self):
+        result = set(walk(self.root, patterns=["**/*.py", "!src/pkg/*.py"]))
+        self.assertEqual(result, {"a.py", "src/core.py"})
 
     def test_empty_directory_yields_nothing(self):
         empty_root = os.path.join(self.root, "empty_dir")

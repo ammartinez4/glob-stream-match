@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Iterable, Iterator, List, Optional, Pattern, Union
+from typing import Iterable, Iterator, List, Optional, Pattern, Tuple, Union
 
 __all__ = [
     "translate",
@@ -115,11 +115,52 @@ def match(pattern: str, path: str) -> bool:
     return compile_pattern(pattern).match(path) is not None
 
 
+def _compile_specs(patterns: Iterable[str]) -> List[Tuple[bool, Pattern[str]]]:
+    """
+    Compile a gitignore-style ordered pattern list into (negated, regex)
+    pairs. A pattern prefixed with '!' negates the ones before it; write
+    '\\!' for a pattern that starts with a literal '!'.
+    """
+    specs = []
+    for p in patterns:
+        negated = False
+        if p.startswith("!"):
+            negated = True
+            p = p[1:]
+        elif p.startswith("\\!"):
+            p = p[1:]
+        specs.append((negated, compile_pattern(p)))
+    return specs
+
+
+def _matches_specs(specs: List[Tuple[bool, Pattern[str]]], path: str) -> bool:
+    """
+    Decide whether `path` is selected by an ordered (negated, regex)
+    list: the last spec that matches wins, so a later '!' pattern can
+    carve an exception out of an earlier positive one and vice versa.
+    A path matches nothing until some spec actually matches it.
+    """
+    result = False
+    for negated, pattern in specs:
+        if pattern.match(path):
+            result = not negated
+    return result
+
+
 def filter_paths(
     patterns: Union[str, Iterable[str]], paths: Iterable[str]
 ) -> Iterator[str]:
     """
-    Yield each path in `paths` that matches at least one of `patterns`.
+    Yield each path in `paths` selected by `patterns`.
+
+    `patterns` is an ordered list evaluated gitignore-style: a plain
+    pattern selects paths that match it, and a pattern prefixed with
+    '!' excludes paths that match it, even if an earlier pattern in the
+    list already selected them. The last pattern to match a given path
+    decides whether it's yielded, so put broad patterns first and
+    exceptions after:
+
+        filter_paths(["**/*.py", "!**/test_*.py"], paths)
 
     `paths` is consumed one item at a time and nothing from it is kept
     around after being checked, so it can be a generator reading lines
@@ -128,9 +169,9 @@ def filter_paths(
     """
     if isinstance(patterns, str):
         patterns = [patterns]
-    compiled = [compile_pattern(p) for p in patterns]
+    specs = _compile_specs(patterns)
     for path in paths:
-        if any(p.match(path) for p in compiled):
+        if _matches_specs(specs, path):
             yield path
 
 
@@ -181,19 +222,21 @@ def walk(
     no list of the whole tree is ever assembled, so memory use is
     bounded by tree depth rather than tree size.
 
-    If `patterns` is given, only paths matching at least one pattern are
-    yielded (directories included, unless files_only is set).
+    If `patterns` is given, only paths selected by it are yielded
+    (directories included, unless files_only is set). `patterns` follows
+    the same gitignore-style ordering as filter_paths(): a '!'-prefixed
+    pattern excludes paths that a preceding pattern selected.
     """
-    compiled: Optional[List[Pattern[str]]] = None
+    specs: Optional[List[Tuple[bool, Pattern[str]]]] = None
     if patterns is not None:
         if isinstance(patterns, str):
             patterns = [patterns]
-        compiled = [compile_pattern(p) for p in patterns]
+        specs = _compile_specs(patterns)
 
     def matches(rel_path: str) -> bool:
-        if compiled is None:
+        if specs is None:
             return True
-        return any(p.match(rel_path) for p in compiled)
+        return _matches_specs(specs, rel_path)
 
     def walk_dir(dir_path: str, rel_prefix: str) -> Iterator[str]:
         with os.scandir(dir_path) as it:

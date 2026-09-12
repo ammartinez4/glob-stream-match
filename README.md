@@ -93,6 +93,19 @@ running on Windows (pass `normalize_sep=` to override); if you're
 feeding paths in from somewhere else, normalize backslashes to `/`
 yourself before matching.
 
+`filter_paths` and `walk` both take a list of patterns instead of a
+single one, and evaluate it gitignore-style: patterns are checked in
+order, and whichever one last matches a given path decides whether
+it's selected. Prefix a pattern with `!` to exclude paths that an
+earlier pattern in the list selected:
+
+```python
+filter_paths(["**/*.py", "!**/test_*.py"], paths)  # all .py files except tests
+```
+
+A `!` on its own has nothing to negate, so `["!*.py"]` alone selects
+nothing. Use `\!` to match a path that starts with a literal `!`.
+
 ## Status
 
 Early. The matcher and streaming helpers work; see the roadmap for
