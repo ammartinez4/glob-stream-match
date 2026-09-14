@@ -2,7 +2,7 @@
 
 import unittest
 
-from globstream import match, translate
+from globstream import first_match, match, match_any, translate
 
 
 class TranslateAnchoringTest(unittest.TestCase):
@@ -107,6 +107,51 @@ class TranslateDoubleStarTest(unittest.TestCase):
         # still can't cross a '/'.
         self.assertTrue(match("a**b", "axyzb"))
         self.assertFalse(match("a**b", "a/b"))
+
+
+class FirstMatchTest(unittest.TestCase):
+    def test_returns_first_matching_pattern(self):
+        patterns = ["*.tar.gz", "*.gz", "*"]
+        self.assertEqual(first_match(patterns, "archive.tar.gz"), "*.tar.gz")
+        self.assertEqual(first_match(patterns, "file.gz"), "*.gz")
+        self.assertEqual(first_match(patterns, "readme.txt"), "*")
+
+    def test_returns_none_when_nothing_matches(self):
+        self.assertIsNone(first_match(["*.py"], "readme.txt"))
+
+    def test_empty_patterns_returns_none(self):
+        self.assertIsNone(first_match([], "anything"))
+
+    def test_does_not_compile_patterns_after_a_match(self):
+        # A pattern past the first match shouldn't even be looked at,
+        # let alone compiled - so a bogus one there is never an error.
+        seen = []
+
+        def patterns():
+            seen.append("*.py")
+            yield "*.py"
+            seen.append("[unclosed")
+            yield "[unclosed"
+
+        self.assertEqual(first_match(patterns(), "core.py"), "*.py")
+        self.assertEqual(seen, ["*.py"])
+
+    def test_precedence_differs_from_gitignore_ordering(self):
+        # filter_paths()/walk() use last-match-wins; first_match() uses
+        # first-match-wins, so the same list picks the opposite pattern.
+        patterns = ["*", "*.py"]
+        self.assertEqual(first_match(patterns, "core.py"), "*")
+
+
+class MatchAnyTest(unittest.TestCase):
+    def test_true_when_any_pattern_matches(self):
+        self.assertTrue(match_any(["*.py", "*.md"], "readme.md"))
+
+    def test_false_when_none_match(self):
+        self.assertFalse(match_any(["*.py", "*.md"], "notes.txt"))
+
+    def test_empty_patterns_is_false(self):
+        self.assertFalse(match_any([], "anything"))
 
 
 if __name__ == "__main__":

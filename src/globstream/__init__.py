@@ -1,7 +1,9 @@
 from .core import (
     compile_pattern,
     filter_paths,
+    first_match,
     match,
+    match_any,
     read_paths,
     translate,
     walk,
@@ -10,7 +12,9 @@ from .core import (
 __all__ = [
     "compile_pattern",
     "filter_paths",
+    "first_match",
     "match",
+    "match_any",
     "read_paths",
     "translate",
     "walk",

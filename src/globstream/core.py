@@ -8,6 +8,8 @@ __all__ = [
     "translate",
     "compile_pattern",
     "match",
+    "match_any",
+    "first_match",
     "filter_paths",
     "read_paths",
     "walk",
@@ -113,6 +115,34 @@ def match(pattern: str, path: str) -> bool:
     use compile_pattern() directly when matching many paths against the
     same pattern."""
     return compile_pattern(pattern).match(path) is not None
+
+
+def first_match(patterns: Iterable[str], path: str) -> Optional[str]:
+    """
+    Return the first pattern in `patterns` that matches `path`, or None
+    if none do.
+
+    This is precedence order, not gitignore order: unlike filter_paths()
+    and walk(), where a later '!' pattern can override an earlier one,
+    here the first matching pattern wins and the rest are never even
+    compiled. That fits a dispatch table where rules are listed from
+    most to least specific:
+
+        first_match(["*.tar.gz", "*.gz", "*"], "archive.tar.gz")
+        # -> "*.tar.gz"
+    """
+    for p in patterns:
+        if compile_pattern(p).match(path):
+            return p
+    return None
+
+
+def match_any(patterns: Iterable[str], path: str) -> bool:
+    """
+    Return whether `path` matches at least one pattern in `patterns`,
+    short-circuiting on the first hit rather than checking them all.
+    """
+    return first_match(patterns, path) is not None
 
 
 def _compile_specs(patterns: Iterable[str]) -> List[Tuple[bool, Pattern[str]]]:
