@@ -13,3 +13,6 @@ authors = [{ name = "ammartinez4" }]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+globstream = ["py.typed"]
