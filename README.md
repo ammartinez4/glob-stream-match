@@ -106,6 +106,16 @@ filter_paths(["**/*.py", "!**/test_*.py"], paths)  # all .py files except tests
 A `!` on its own has nothing to negate, so `["!*.py"]` alone selects
 nothing. Use `\!` to match a path that starts with a literal `!`.
 
+Every matching function takes `case_sensitive`, defaulting to `True`.
+Pass `case_sensitive=False` when the paths come from a filesystem that
+doesn't distinguish case (Windows, or the default APFS setup on
+macOS), so that `"*.JPG"` also selects `"photo.jpg"`:
+
+```python
+match("*.JPG", "photo.jpg", case_sensitive=False)  # True
+walk("/some/dir", patterns="**/*.PY", case_sensitive=False)
+```
+
 ## Status
 
 Early. The matcher and streaming helpers work; see the roadmap for

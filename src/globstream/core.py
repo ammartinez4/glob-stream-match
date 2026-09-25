@@ -105,19 +105,26 @@ def _translate_segment(seg: str) -> str:
     return "".join(out)
 
 
-def compile_pattern(pattern: str) -> Pattern[str]:
-    """Compile a glob pattern into a regex Pattern for repeated matching."""
-    return re.compile(translate(pattern))
+def compile_pattern(pattern: str, *, case_sensitive: bool = True) -> Pattern[str]:
+    """Compile a glob pattern into a regex Pattern for repeated matching.
+
+    Set `case_sensitive=False` when matching against a case-insensitive
+    filesystem (the default on Windows and macOS's usual HFS+/APFS
+    setup) so that a pattern like "*.JPG" also matches "photo.jpg"."""
+    flags = 0 if case_sensitive else re.IGNORECASE
+    return re.compile(translate(pattern), flags)
 
 
-def match(pattern: str, path: str) -> bool:
+def match(pattern: str, path: str, *, case_sensitive: bool = True) -> bool:
     """Return whether `path` matches `pattern`. Compiles on every call -
     use compile_pattern() directly when matching many paths against the
     same pattern."""
-    return compile_pattern(pattern).match(path) is not None
+    return compile_pattern(pattern, case_sensitive=case_sensitive).match(path) is not None
 
 
-def first_match(patterns: Iterable[str], path: str) -> Optional[str]:
+def first_match(
+    patterns: Iterable[str], path: str, *, case_sensitive: bool = True
+) -> Optional[str]:
     """
     Return the first pattern in `patterns` that matches `path`, or None
     if none do.
@@ -132,20 +139,22 @@ def first_match(patterns: Iterable[str], path: str) -> Optional[str]:
         # -> "*.tar.gz"
     """
     for p in patterns:
-        if compile_pattern(p).match(path):
+        if compile_pattern(p, case_sensitive=case_sensitive).match(path):
             return p
     return None
 
 
-def match_any(patterns: Iterable[str], path: str) -> bool:
+def match_any(patterns: Iterable[str], path: str, *, case_sensitive: bool = True) -> bool:
     """
     Return whether `path` matches at least one pattern in `patterns`,
     short-circuiting on the first hit rather than checking them all.
     """
-    return first_match(patterns, path) is not None
+    return first_match(patterns, path, case_sensitive=case_sensitive) is not None
 
 
-def _compile_specs(patterns: Iterable[str]) -> List[Tuple[bool, Pattern[str]]]:
+def _compile_specs(
+    patterns: Iterable[str], *, case_sensitive: bool = True
+) -> List[Tuple[bool, Pattern[str]]]:
     """
     Compile a gitignore-style ordered pattern list into (negated, regex)
     pairs. A pattern prefixed with '!' negates the ones before it; write
@@ -159,7 +168,7 @@ def _compile_specs(patterns: Iterable[str]) -> List[Tuple[bool, Pattern[str]]]:
             p = p[1:]
         elif p.startswith("\\!"):
             p = p[1:]
-        specs.append((negated, compile_pattern(p)))
+        specs.append((negated, compile_pattern(p, case_sensitive=case_sensitive)))
     return specs
 
 
@@ -178,7 +187,10 @@ def _matches_specs(specs: List[Tuple[bool, Pattern[str]]], path: str) -> bool:
 
 
 def filter_paths(
-    patterns: Union[str, Iterable[str]], paths: Iterable[str]
+    patterns: Union[str, Iterable[str]],
+    paths: Iterable[str],
+    *,
+    case_sensitive: bool = True,
 ) -> Iterator[str]:
     """
     Yield each path in `paths` selected by `patterns`.
@@ -192,6 +204,9 @@ def filter_paths(
 
         filter_paths(["**/*.py", "!**/test_*.py"], paths)
 
+    Pass `case_sensitive=False` when `paths` come from a case-insensitive
+    filesystem, so that e.g. "*.jpg" also selects "Photo.JPG".
+
     `paths` is consumed one item at a time and nothing from it is kept
     around after being checked, so it can be a generator reading lines
     from a multi-gigabyte manifest, a subprocess's stdout, or any other
@@ -199,7 +214,7 @@ def filter_paths(
     """
     if isinstance(patterns, str):
         patterns = [patterns]
-    specs = _compile_specs(patterns)
+    specs = _compile_specs(patterns, case_sensitive=case_sensitive)
     for path in paths:
         if _matches_specs(specs, path):
             yield path
@@ -241,6 +256,7 @@ def walk(
     patterns: Optional[Union[str, Iterable[str]]] = None,
     *,
     files_only: bool = False,
+    case_sensitive: bool = True,
 ) -> Iterator[str]:
     """
     Recursively walk `root`, yielding paths (relative to `root`, using
@@ -256,12 +272,18 @@ def walk(
     (directories included, unless files_only is set). `patterns` follows
     the same gitignore-style ordering as filter_paths(): a '!'-prefixed
     pattern excludes paths that a preceding pattern selected.
+
+    Pass `case_sensitive=False` to match `patterns` the way the
+    underlying filesystem resolves names - useful on Windows or macOS's
+    default APFS setup, where "*.JPG" and "photo.jpg" refer to the same
+    entry either way. This only affects pattern matching; entries are
+    still read from disk with whatever casing they're stored as.
     """
     specs: Optional[List[Tuple[bool, Pattern[str]]]] = None
     if patterns is not None:
         if isinstance(patterns, str):
             patterns = [patterns]
-        specs = _compile_specs(patterns)
+        specs = _compile_specs(patterns, case_sensitive=case_sensitive)
 
     def matches(rel_path: str) -> bool:
         if specs is None:

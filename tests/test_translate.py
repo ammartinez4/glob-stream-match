@@ -143,6 +143,28 @@ class FirstMatchTest(unittest.TestCase):
         self.assertEqual(first_match(patterns, "core.py"), "*")
 
 
+class CaseSensitivityTest(unittest.TestCase):
+    def test_default_is_case_sensitive(self):
+        self.assertFalse(match("*.PY", "core.py"))
+
+    def test_case_insensitive_matches_either_case(self):
+        self.assertTrue(match("*.PY", "core.py", case_sensitive=False))
+        self.assertTrue(match("*.py", "CORE.PY", case_sensitive=False))
+
+    def test_case_insensitive_applies_within_char_class(self):
+        self.assertTrue(match("[a-z].py", "A.py", case_sensitive=False))
+
+    def test_first_match_respects_case_sensitive(self):
+        self.assertIsNone(first_match(["*.PY"], "core.py"))
+        self.assertEqual(
+            first_match(["*.PY"], "core.py", case_sensitive=False), "*.PY"
+        )
+
+    def test_match_any_respects_case_sensitive(self):
+        self.assertFalse(match_any(["*.PY"], "core.py"))
+        self.assertTrue(match_any(["*.PY"], "core.py", case_sensitive=False))
+
+
 class MatchAnyTest(unittest.TestCase):
     def test_true_when_any_pattern_matches(self):
         self.assertTrue(match_any(["*.py", "*.md"], "readme.md"))

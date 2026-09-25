@@ -61,6 +61,16 @@ class FilterPathsTest(unittest.TestCase):
         result = list(filter_paths(["*.py", "!test_*.py"], paths))
         self.assertEqual(result, ["a.py", "b.py"])
 
+    def test_case_sensitive_by_default(self):
+        result = list(filter_paths("*.PY", ["a.py", "b.PY"]))
+        self.assertEqual(result, ["b.PY"])
+
+    def test_case_insensitive_when_requested(self):
+        result = list(
+            filter_paths("*.PY", ["a.py", "b.PY"], case_sensitive=False)
+        )
+        self.assertEqual(result, ["a.py", "b.PY"])
+
     def test_negated_pattern_alone_matches_nothing(self):
         # There's nothing earlier for it to carve an exception out of.
         result = list(filter_paths("!*.py", ["a.py"]))
@@ -179,6 +189,10 @@ class WalkTest(unittest.TestCase):
         missing = os.path.join(self.root, "does-not-exist")
         with self.assertRaises(FileNotFoundError):
             list(walk(missing))
+
+    def test_case_insensitive_pattern(self):
+        result = set(walk(self.root, patterns="*.PY", case_sensitive=False))
+        self.assertEqual(result, {"a.py"})
 
 
 if __name__ == "__main__":
